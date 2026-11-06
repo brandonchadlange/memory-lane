@@ -5,7 +5,7 @@ import { formatMemoryDate } from '@/lib/date'
 import { youtubeVideoId } from '@/lib/youtube'
 import { client } from './client'
 import { urlFor } from './image'
-import { MEMORY_BOOK_QUERY } from './queries'
+import { MEMORY_BOOK_QUERY, MEMORY_BOOKS_QUERY } from './queries'
 
 export type MemoryPicture = {
   url: string
@@ -58,6 +58,7 @@ type MomentField = {
 }
 
 type MemoryBookDocument = {
+  _id?: string | null
   title?: string | null
   slug?: string | null
   date?: string | null
@@ -146,9 +147,38 @@ export function toMemoryBook(document: MemoryBookDocument | null): MemoryBook | 
   }
 }
 
+export type PublishedBook = {
+  id: string
+  title: string
+  slug: string
+  dateLabel?: string
+  cover?: MemoryPicture
+}
+
 export const getMemoryBook = cache(async (slug: string): Promise<MemoryBook | null> => {
   const document = await client.fetch<MemoryBookDocument | null>(MEMORY_BOOK_QUERY, {
     slug: stegaClean(slug),
   })
   return toMemoryBook(document)
+})
+
+export const getPublishedBooks = cache(async (): Promise<PublishedBook[]> => {
+  const documents = await client.fetch<MemoryBookDocument[] | null>(MEMORY_BOOKS_QUERY)
+  return (documents ?? []).flatMap((document) => {
+    const title = text(document.title)
+    const slug = text(document.slug)
+    const id = text(document._id)
+    if (!title || !slug || !id) return []
+    const date = text(document.date)
+    const cover = pictureFrom(document.cover ?? null, 800, 1000)
+    return [
+      {
+        id,
+        title,
+        slug,
+        dateLabel: date ? formatMemoryDate(date) ?? undefined : undefined,
+        cover: cover ? { ...cover, alt: cover.alt || title } : undefined,
+      },
+    ]
+  })
 })
