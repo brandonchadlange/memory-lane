@@ -30,3 +30,14 @@ export const MEMORY_BOOK_QUERY = defineQuery(/* groq */ `
     }
   }
 `)
+
+export const MEMORY_BOOKS_QUERY = defineQuery(/* groq */ `
+  *[_type == "memoryBook" && defined(slug.current) && defined(title)]
+    | order(date desc, _updatedAt desc) {
+    _id,
+    title,
+    "slug": slug.current,
+    date,
+    cover{ ${imageFields} }
+  }
+`)
