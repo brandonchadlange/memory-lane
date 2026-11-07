@@ -11,6 +11,11 @@ const nextConfig: NextConfig = {
         hostname: 'cdn.sanity.io',
         pathname: '/images/xcb9rpph/**',
       },
+      {
+        protocol: 'https',
+        hostname: 'i.ytimg.com',
+        pathname: '/vi/**',
+      },
     ],
   },
   turbopack: {

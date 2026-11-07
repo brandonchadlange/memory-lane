@@ -181,7 +181,6 @@ function Soundtrack({
   youtubeId,
   playing,
   songError,
-  placement,
   onToggle,
   hostRef,
 }: {
@@ -189,22 +188,27 @@ function Soundtrack({
   youtubeId: string
   playing: boolean
   songError: boolean
-  placement: 'top' | 'bottom'
   onToggle: () => void
   hostRef: RefObject<HTMLDivElement | null>
 }) {
-  const position = placement === 'top' ? 'top-4 right-4' : 'bottom-4 right-4'
-  const className = `absolute z-30 flex w-44 flex-col items-center gap-2 text-white no-underline ${position} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white`
+  const className = 'absolute right-4 bottom-24 z-30 flex w-28 flex-col items-center gap-1.5 text-white no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white'
   const face = (
     <>
-      <span className="relative block size-44">
+      {songError ? <span className="text-center text-[11px] text-white/85 [text-shadow:0_1px_8px_rgb(0_0_0/0.9)]">Open on YouTube</span> : null}
+      <span className="line-clamp-2 text-center font-serif text-xs leading-tight [text-shadow:0_1px_8px_rgb(0_0_0/0.9)]">{songName}</span>
+      <span className="relative block size-28">
         <span className={`record-grooves${playing ? ' is-playing' : ''}`} />
         <span className="record-label">
+          <Image
+            src={`https://i.ytimg.com/vi/${youtubeId}/hqdefault.jpg`}
+            alt=""
+            fill
+            sizes="72px"
+            className="object-cover"
+          />
           <span className="record-hole" />
-          <span className="record-title" title={songName}>{songName}</span>
         </span>
       </span>
-      {songError ? <span className="text-center text-xs text-white/85 [text-shadow:0_1px_8px_rgb(0_0_0/0.9)]">Open on YouTube</span> : null}
     </>
   )
 
@@ -463,7 +467,7 @@ export function MemoryViewer({ book }: { book: MemoryBook }) {
           <StoryClock key={moment._key} moment={moment} videoRef={videoRef} onAdvance={() => move(1)} />
           {moment.kind === 'photo' ? (
             <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/55 via-black/15 to-transparent px-5 pt-20 pb-5">
-              <div className={book.youtubeId ? 'max-w-[calc(100%-13.5rem)]' : 'max-w-xl'}>
+              <div className={book.youtubeId ? 'max-w-[calc(100%-8.5rem)]' : 'max-w-xl'}>
                 {moment.caption ? <p className="font-serif text-3xl leading-none text-balance">{moment.caption}</p> : null}
                 <p className="mt-2 text-sm text-white/75">
                   {index + 1} of {book.moments.length}
@@ -480,7 +484,7 @@ export function MemoryViewer({ book }: { book: MemoryBook }) {
           )}
         </>
       ) : (
-        <div className="h-full overflow-y-auto px-6 pt-16 pb-48">
+        <div className="h-full overflow-y-auto px-6 pt-16 pb-64">
           <div className="flex min-h-full flex-col justify-center">
             {book.dateLabel ? <p className="text-sm text-white/70">{book.dateLabel}</p> : null}
             <h1 className="mt-3 max-w-xl font-serif text-5xl leading-none text-balance">{book.title}</h1>
@@ -522,7 +526,6 @@ export function MemoryViewer({ book }: { book: MemoryBook }) {
           youtubeId={book.youtubeId}
           playing={playing}
           songError={songError}
-          placement={moment?.kind === 'video' ? 'top' : 'bottom'}
           onToggle={toggleMusic}
           hostRef={hostRef}
         />
