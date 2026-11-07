@@ -54,8 +54,32 @@ function loadYouTubeApi(): Promise<void> {
   })
 }
 
+const PHOTO_MS = 5000
+const RING_RADIUS = 20
+const RING_LENGTH = 2 * Math.PI * RING_RADIUS
+
 function storyMoment(book: MemoryBook, index: number): MemoryMoment | undefined {
   return book.moments[index]
+}
+
+function ProgressRing({ remaining }: { remaining: number }) {
+  const left = Math.min(1, Math.max(0, remaining))
+  return (
+    <svg className="pointer-events-none absolute inset-0 size-full -rotate-90" viewBox="0 0 44 44" aria-hidden="true">
+      <circle cx="22" cy="22" r={RING_RADIUS} fill="none" stroke="rgba(255,255,255,0.28)" strokeWidth="2" />
+      <circle
+        cx="22"
+        cy="22"
+        r={RING_RADIUS}
+        fill="none"
+        stroke="white"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeDasharray={RING_LENGTH}
+        strokeDashoffset={RING_LENGTH * (1 - left)}
+      />
+    </svg>
+  )
 }
 
 function EdgeButton({
@@ -63,11 +87,13 @@ function EdgeButton({
   direction,
   disabled,
   onClick,
+  remaining,
 }: {
   label: string
   direction: 'left' | 'right'
   disabled?: boolean
   onClick: () => void
+  remaining?: number
 }) {
   return (
     <button
@@ -75,13 +101,79 @@ function EdgeButton({
       aria-label={label}
       disabled={disabled}
       onClick={onClick}
-      className={`absolute top-1/2 z-20 grid size-11 -translate-y-1/2 place-items-center rounded-full border border-white/25 bg-black/40 text-white backdrop-blur-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:opacity-30 ${direction === 'left' ? 'left-3' : 'right-3'}`}
+      className={`absolute top-1/2 z-20 grid size-11 -translate-y-1/2 place-items-center rounded-full bg-black/40 text-white backdrop-blur-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:opacity-30 ${remaining === undefined ? 'border border-white/25' : ''} ${direction === 'left' ? 'left-3' : 'right-3'}`}
     >
+      {remaining === undefined ? null : <ProgressRing remaining={remaining} />}
       <svg viewBox="0 0 20 20" className={`size-5 ${direction === 'left' ? 'rotate-180' : ''}`} aria-hidden="true">
         <path d="M7.5 4.5 13 10l-5.5 5.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     </button>
   )
+}
+
+function StoryClock({
+  moment,
+  videoRef,
+  onAdvance,
+}: {
+  moment: MemoryMoment
+  videoRef: RefObject<HTMLVideoElement | null>
+  onAdvance: () => void
+}) {
+  const [remaining, setRemaining] = useState(1)
+  const advanceRef = useRef(onAdvance)
+
+  useEffect(() => {
+    advanceRef.current = onAdvance
+  }, [onAdvance])
+
+  useEffect(() => {
+    if (moment.kind === 'photo') {
+      const started = performance.now()
+      let frame = 0
+      const tick = (now: number) => {
+        const left = Math.max(0, 1 - (now - started) / PHOTO_MS)
+        setRemaining(left)
+        if (left === 0) {
+          advanceRef.current()
+          return
+        }
+        frame = requestAnimationFrame(tick)
+      }
+      frame = requestAnimationFrame(tick)
+      return () => cancelAnimationFrame(frame)
+    }
+
+    const video = videoRef.current
+    if (!video) return
+    let frame = 0
+    const update = () => {
+      const duration = video.duration
+      if (Number.isFinite(duration) && duration > 0) {
+        setRemaining(Math.max(0, 1 - video.currentTime / duration))
+      }
+    }
+    const tick = () => {
+      update()
+      if (!video.paused && !video.ended) frame = requestAnimationFrame(tick)
+    }
+    const start = () => {
+      cancelAnimationFrame(frame)
+      frame = requestAnimationFrame(tick)
+    }
+    video.addEventListener('play', start)
+    video.addEventListener('seeked', update)
+    video.addEventListener('loadedmetadata', update)
+    start()
+    return () => {
+      cancelAnimationFrame(frame)
+      video.removeEventListener('play', start)
+      video.removeEventListener('seeked', update)
+      video.removeEventListener('loadedmetadata', update)
+    }
+  }, [moment, videoRef])
+
+  return <EdgeButton label="Next" direction="right" onClick={onAdvance} remaining={remaining} />
 }
 
 function Soundtrack({
@@ -241,6 +333,32 @@ export function MemoryViewer({ book }: { book: MemoryBook }) {
     }
   }, [])
 
+  useEffect(() => {
+    if (stage !== 'story' || moment?.kind !== 'video') return
+    const video = videoRef.current
+    if (!video) return
+    let cancelled = false
+    async function start() {
+      if (!video) return
+      try {
+        video.muted = false
+        await video.play()
+      } catch {
+        if (cancelled) return
+        video.muted = true
+        try {
+          await video.play()
+        } catch {
+          // The visitor can press play. The story waits until the video finishes.
+        }
+      }
+    }
+    void start()
+    return () => {
+      cancelled = true
+    }
+  }, [stage, moment?._key, moment?.kind])
+
   function openMemory() {
     setIndex(0)
     setStage(book.moments.length > 0 ? 'story' : 'end')
@@ -259,12 +377,18 @@ export function MemoryViewer({ book }: { book: MemoryBook }) {
     player.pauseVideo()
   }
 
-  function pauseSongForVideo() {
-    playerRef.current?.pauseVideo()
-  }
-
   function resumeSongAfterVideo() {
     if (musicWanted.current) playerRef.current?.playVideo()
+  }
+
+  function syncSongWithVideo() {
+    const video = videoRef.current
+    const videoHasSound = Boolean(video && !video.paused && !video.ended && !video.muted && video.volume > 0)
+    if (videoHasSound) {
+      playerRef.current?.pauseVideo()
+      return
+    }
+    resumeSongAfterVideo()
   }
 
   if (stage === 'cover') {
@@ -324,14 +448,19 @@ export function MemoryViewer({ book }: { book: MemoryBook }) {
                 preload="metadata"
                 src={moment.videoUrl}
                 aria-label={moment.caption || 'Video'}
-                onPlay={pauseSongForVideo}
-                onPause={resumeSongAfterVideo}
-                onEnded={resumeSongAfterVideo}
+                autoPlay
+                onPlay={syncSongWithVideo}
+                onPause={syncSongWithVideo}
+                onVolumeChange={syncSongWithVideo}
+                onEnded={() => {
+                  syncSongWithVideo()
+                  move(1)
+                }}
               />
             )}
           </div>
           <EdgeButton label="Previous" direction="left" disabled={index === 0} onClick={() => move(-1)} />
-          <EdgeButton label="Next" direction="right" onClick={() => move(1)} />
+          <StoryClock key={moment._key} moment={moment} videoRef={videoRef} onAdvance={() => move(1)} />
           {moment.kind === 'photo' ? (
             <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/55 via-black/15 to-transparent px-5 pt-20 pb-5">
               <div className={book.youtubeId ? 'max-w-[calc(100%-13.5rem)]' : 'max-w-xl'}>
