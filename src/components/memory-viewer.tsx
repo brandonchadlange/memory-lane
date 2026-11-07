@@ -126,6 +126,7 @@ export function MemoryViewer({ book }: { book: MemoryBook }) {
           videoId,
           playerVars: {
             autoplay: 1,
+            controls: 0,
             rel: 0,
             playsinline: 1,
             loop: 1,
@@ -295,25 +296,26 @@ export function MemoryViewer({ book }: { book: MemoryBook }) {
         </div>
       )}
       {book.youtubeId ? (
-        <div className="flex items-center justify-between gap-4 border-t border-white/10 px-4 py-3">
-          <div className="min-w-0">
-            <p className="truncate text-sm">{songName}</p>
-            {songError ? (
-              <a
-                className="text-sm text-white/70 underline-offset-4 hover:underline"
-                href={`https://www.youtube.com/watch?v=${book.youtubeId}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                Open the song on YouTube
-              </a>
-            ) : (
-              <button type="button" onClick={toggleMusic} className="text-sm text-white/70">
-                {paused ? 'Play song' : 'Pause song'}
-              </button>
-            )}
+        <div className="border-t border-white/10 px-4 py-3">
+          <p className="truncate text-sm">{songName}</p>
+          {songError ? (
+            <a
+              className="text-sm text-white/70 underline-offset-4 hover:underline"
+              href={`https://www.youtube.com/watch?v=${book.youtubeId}`}
+              target="_blank"
+              rel="noreferrer"
+            >
+              Open the song on YouTube
+            </a>
+          ) : (
+            <button type="button" onClick={toggleMusic} className="text-sm text-white/70">
+              {paused ? 'Play song' : 'Pause song'}
+            </button>
+          )}
+          {/* YouTube replaces this node with an iframe. Keep a real size so the song can start, and hide the picture. */}
+          <div inert aria-hidden="true" className="pointer-events-none fixed bottom-0 left-0 h-[135px] w-[240px] overflow-hidden opacity-0">
+            <div ref={hostRef} />
           </div>
-          <div ref={hostRef} className="h-[135px] w-[240px] shrink-0 bg-black" />
         </div>
       ) : null}
     </section>
