@@ -2,7 +2,7 @@
 
 import Image from 'next/image'
 import Link from 'next/link'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import type { MemoryBook, MemoryMoment } from '@/sanity/lib/books'
 
 type Stage = 'cover' | 'story' | 'end'
@@ -56,6 +56,83 @@ function loadYouTubeApi(): Promise<void> {
 
 function storyMoment(book: MemoryBook, index: number): MemoryMoment | undefined {
   return book.moments[index]
+}
+
+function EdgeButton({
+  label,
+  direction,
+  disabled,
+  onClick,
+}: {
+  label: string
+  direction: 'left' | 'right'
+  disabled?: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      disabled={disabled}
+      onClick={onClick}
+      className={`absolute top-1/2 z-20 grid size-11 -translate-y-1/2 place-items-center rounded-full border border-white/25 bg-black/40 text-white backdrop-blur-md focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:opacity-30 ${direction === 'left' ? 'left-3' : 'right-3'}`}
+    >
+      <svg viewBox="0 0 20 20" className={`size-5 ${direction === 'left' ? 'rotate-180' : ''}`} aria-hidden="true">
+        <path d="M7.5 4.5 13 10l-5.5 5.5" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    </button>
+  )
+}
+
+function Soundtrack({
+  songName,
+  youtubeId,
+  playing,
+  songError,
+  placement,
+  onToggle,
+  hostRef,
+}: {
+  songName: string
+  youtubeId: string
+  playing: boolean
+  songError: boolean
+  placement: 'top' | 'bottom'
+  onToggle: () => void
+  hostRef: RefObject<HTMLDivElement | null>
+}) {
+  const position = placement === 'top' ? 'top-4 right-4' : 'bottom-4 right-4'
+  const className = `absolute z-30 flex w-44 flex-col items-center gap-2 text-white no-underline ${position} focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-4 focus-visible:outline-white`
+  const face = (
+    <>
+      <span className="relative block size-44">
+        <span className={`record-grooves${playing ? ' is-playing' : ''}`} />
+        <span className="record-label">
+          <span className="record-hole" />
+          <span className="record-title" title={songName}>{songName}</span>
+        </span>
+      </span>
+      {songError ? <span className="text-center text-xs text-white/85 [text-shadow:0_1px_8px_rgb(0_0_0/0.9)]">Open on YouTube</span> : null}
+    </>
+  )
+
+  return (
+    <>
+      {songError ? (
+        <a className={className} href={`https://www.youtube.com/watch?v=${youtubeId}`} target="_blank" rel="noreferrer">
+          {face}
+        </a>
+      ) : (
+        <button type="button" className={className} onClick={onToggle} aria-pressed={playing} aria-label={playing ? `Pause ${songName}` : `Play ${songName}`}>
+          {face}
+        </button>
+      )}
+      {/* YouTube replaces this node with an iframe. Keep a real size so the song can start, and hide the picture. */}
+      <div inert aria-hidden="true" className="pointer-events-none absolute top-0 left-0 h-[135px] w-[240px] overflow-hidden opacity-0">
+        <div ref={hostRef} />
+      </div>
+    </>
+  )
 }
 
 export function MemoryViewer({ book }: { book: MemoryBook }) {
@@ -220,18 +297,20 @@ export function MemoryViewer({ book }: { book: MemoryBook }) {
     )
   }
 
+  const playing = !paused && !songError
+
   return (
-    <section className="flex min-h-dvh flex-col bg-night text-white">
+    <section className="relative h-dvh overflow-hidden bg-night text-white">
       {stage === 'story' && moment ? (
         <>
-          <div className="relative min-h-0 flex-1">
+          <div className="absolute inset-0">
             {moment.kind === 'photo' ? (
               <Image
                 src={moment.picture.url}
                 alt={moment.picture.alt || moment.caption || book.title}
                 fill
                 sizes="100vw"
-                className="object-contain"
+                className="object-cover"
                 placeholder={moment.picture.lqip ? 'blur' : 'empty'}
                 blurDataURL={moment.picture.lqip}
               />
@@ -239,7 +318,7 @@ export function MemoryViewer({ book }: { book: MemoryBook }) {
               <video
                 key={moment._key}
                 ref={videoRef}
-                className="h-full w-full bg-black object-contain"
+                className="h-full w-full bg-black object-cover"
                 controls
                 playsInline
                 preload="metadata"
@@ -251,72 +330,73 @@ export function MemoryViewer({ book }: { book: MemoryBook }) {
               />
             )}
           </div>
-          <div className="flex items-center justify-between gap-3 px-4 py-3">
-            <button type="button" onClick={() => move(-1)} disabled={index === 0} className="h-11 rounded-full border border-white/25 px-4 disabled:opacity-35">
-              Previous
-            </button>
-            <p className="text-center text-sm text-white/75">
-              {moment.caption ? <span className="mb-1 block text-white">{moment.caption}</span> : null}
-              {index + 1} of {book.moments.length}
-            </p>
-            <button type="button" onClick={() => move(1)} className="h-11 rounded-full border border-white/25 px-4">
-              Next
-            </button>
-          </div>
+          <EdgeButton label="Previous" direction="left" disabled={index === 0} onClick={() => move(-1)} />
+          <EdgeButton label="Next" direction="right" onClick={() => move(1)} />
+          {moment.kind === 'photo' ? (
+            <div className="pointer-events-none absolute inset-x-0 bottom-0 z-10 bg-gradient-to-t from-black/55 via-black/15 to-transparent px-5 pt-20 pb-5">
+              <div className={book.youtubeId ? 'max-w-[calc(100%-13.5rem)]' : 'max-w-xl'}>
+                {moment.caption ? <p className="font-serif text-3xl leading-none text-balance">{moment.caption}</p> : null}
+                <p className="mt-2 text-sm text-white/75">
+                  {index + 1} of {book.moments.length}
+                </p>
+              </div>
+            </div>
+          ) : (
+            <div className="pointer-events-none absolute top-4 left-4 z-10 max-w-[46%]">
+              {moment.caption ? <p className="font-serif text-2xl leading-none text-balance">{moment.caption}</p> : null}
+              <p className="mt-2 text-sm text-white/75">
+                {index + 1} of {book.moments.length}
+              </p>
+            </div>
+          )}
         </>
       ) : (
-        <div className="flex flex-1 flex-col justify-center px-6 py-16">
-          {book.dateLabel ? <p className="text-sm text-white/70">{book.dateLabel}</p> : null}
-          <h1 className="mt-3 max-w-xl font-serif text-5xl leading-none text-balance">{book.title}</h1>
-          {book.dedication ? (
-            <p className="mt-6 max-w-md whitespace-pre-wrap text-lg leading-relaxed text-white/85">{book.dedication}</p>
-          ) : null}
-          <div className="mt-10 flex flex-wrap gap-3">
-            {book.moments.length > 0 ? (
-              <button
-                type="button"
-                onClick={() => {
-                  setIndex(0)
-                  setStage('story')
-                }}
-                className="h-12 rounded-full bg-white px-6 font-medium text-night"
-              >
-                Look through it again
-              </button>
+        <div className="h-full overflow-y-auto px-6 pt-16 pb-48">
+          <div className="flex min-h-full flex-col justify-center">
+            {book.dateLabel ? <p className="text-sm text-white/70">{book.dateLabel}</p> : null}
+            <h1 className="mt-3 max-w-xl font-serif text-5xl leading-none text-balance">{book.title}</h1>
+            {book.dedication ? (
+              <p className="mt-6 max-w-md whitespace-pre-wrap text-lg leading-relaxed text-white/85">{book.dedication}</p>
             ) : null}
-            {book.moments.length > 0 ? (
-              <button type="button" onClick={() => move(-1)} className="h-11 rounded-full border border-white/25 px-4">
-                Previous
-              </button>
-            ) : null}
+            <div className="mt-10 flex flex-wrap gap-3">
+              {book.moments.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIndex(0)
+                    setStage('story')
+                  }}
+                  className="h-12 rounded-full bg-white px-6 font-medium text-night focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                >
+                  Look through it again
+                </button>
+              ) : null}
+              {book.moments.length > 0 ? (
+                <button
+                  type="button"
+                  onClick={() => move(-1)}
+                  className="h-11 rounded-full border border-white/25 px-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                >
+                  Previous
+                </button>
+              ) : null}
+            </div>
+            <Link href={`/m/${book.slug}/share`} className="mt-8 w-fit text-sm text-white/70 underline-offset-4 hover:underline">
+              Share this memory
+            </Link>
           </div>
-          <Link href={`/m/${book.slug}/share`} className="mt-8 w-fit text-sm text-white/70 underline-offset-4 hover:underline">
-            Share this memory
-          </Link>
         </div>
       )}
       {book.youtubeId ? (
-        <div className="border-t border-white/10 px-4 py-3">
-          <p className="truncate text-sm">{songName}</p>
-          {songError ? (
-            <a
-              className="text-sm text-white/70 underline-offset-4 hover:underline"
-              href={`https://www.youtube.com/watch?v=${book.youtubeId}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Open the song on YouTube
-            </a>
-          ) : (
-            <button type="button" onClick={toggleMusic} className="text-sm text-white/70">
-              {paused ? 'Play song' : 'Pause song'}
-            </button>
-          )}
-          {/* YouTube replaces this node with an iframe. Keep a real size so the song can start, and hide the picture. */}
-          <div inert aria-hidden="true" className="pointer-events-none fixed bottom-0 left-0 h-[135px] w-[240px] overflow-hidden opacity-0">
-            <div ref={hostRef} />
-          </div>
-        </div>
+        <Soundtrack
+          songName={songName}
+          youtubeId={book.youtubeId}
+          playing={playing}
+          songError={songError}
+          placement={moment?.kind === 'video' ? 'top' : 'bottom'}
+          onToggle={toggleMusic}
+          hostRef={hostRef}
+        />
       ) : null}
     </section>
   )
